@@ -255,9 +255,9 @@ impl Config {
     pub fn profiler(&mut self, profile: ProfilingStrategy) -> Result<&mut Self> {
         match profile {
             ProfilingStrategy::JitDumpProfiler => {
-                self.profiler = { Some(Arc::new(Mutex::new(Box::new(JitDumpAgent::default())))) }
+                self.profiler = Some(Arc::new(Mutex::new(Box::new(JitDumpAgent::default()))))
             }
-            _ => self.profiler = { None },
+            _ => self.profiler = None,
         };
         Ok(self)
     }

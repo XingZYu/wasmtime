@@ -1,5 +1,5 @@
 use crate::callable::{NativeCallable, WasmtimeFn, WrappedCallable};
-use crate::{Callable, FuncType, Store, Trap, Val, ValType};
+use crate::{Callable, FuncType, Store, Trap, Val, ValType, AdapterType};
 use anyhow::{ensure, Context as _};
 use std::fmt;
 use std::mem;
@@ -146,6 +146,66 @@ pub struct Func {
     store: Store,
     callable: Rc<dyn WrappedCallable + 'static>,
     ty: FuncType,
+}
+
+/// A WebAssembly Adapter which can be called.
+#[derive(Clone)]
+pub struct AdapterFunc {
+    store: Store,
+    callable: Rc<dyn Callable + 'static>,
+    ty: AdapterType,
+}
+
+impl AdapterFunc {
+    /// Creates a new `Adapters` with the given arguments, typically to create a
+    /// user-defined function to pass as an import to a module.
+    ///
+    /// * `store` - a cache of data where information is stored, typically
+    ///   shared with a [`Module`](crate::Module).
+    ///
+    /// * `ty` - the signature of this function, used to indicate what the
+    ///   inputs and outputs are, which must be WebAssembly types.
+    ///
+    /// * `callable` - a type implementing the [`Callable`] trait which
+    ///   is the implementation of this `Func` value.
+    ///
+    /// Note that the implementation of `callable` doesn't have to adhere to the `ty`
+    /// signature given.
+    pub fn new(store: &Store, ty: AdapterType, callable: Rc<dyn Callable + 'static>) -> AdapterFunc {
+        AdapterFunc {
+            store: store.clone(),
+            callable,
+            ty,
+        }
+    }
+
+    /// Returns the underlying wasm type that this `Adapter` has.
+    pub fn ty(&self) -> &AdapterType {
+        &self.ty
+    }
+
+    pub(crate) fn store(&self) -> &Store {
+        &self.store
+    }
+    
+    /// Returns the number of results this function produces.
+    pub fn result_arity(&self) -> usize {
+        self.ty.results().len()
+    }
+    
+    /// Invokes this adapter function
+    pub fn call(&self, params: &[Val]) -> Result<Box<[Val]>, Trap> {
+        for param in params {
+            if !param.comes_from_same_store(&self.store) {
+                return Err(Trap::new(
+                    "cross-`Store` values are not currently supported",
+                ));
+            }
+        }
+        let mut results = vec![Val::null(); self.result_arity()];
+        self.callable.call(params, &mut results)?;
+        Ok(results.into_boxed_slice())
+    }
 }
 
 macro_rules! wrappers {

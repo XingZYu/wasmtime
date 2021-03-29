@@ -1,10 +1,10 @@
-use crate::callable::{WasmtimeFn, WrappedCallable};
+use crate::callable::{WasmtimeFn};
 use crate::frame_info::{GlobalFrameInfoRegistration, FRAME_INFO};
 use crate::types::{
     ExportType, ExternType, FuncType, GlobalType, ImportType, Limits, MemoryType, Mutability,
-    TableType, ValType,
+    TableType, ValType, AdapterType
 };
-use crate::{Callable, Func, Store, Trap, Val};
+use crate::{Callable, Func, Store, Trap, Val, AdapterFunc, Memory};
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -17,7 +17,7 @@ use wasmparser::{
 };
 use wasmtime_environ::wasm::FuncIndex;
 use wasmtime_jit::CompiledModule;
-use wasmtime_runtime::InstanceHandle;
+use wasmtime_runtime::{InstanceHandle, Export as rtExport};
 
 fn into_memory_type(mt: wasmparser::MemoryType) -> Result<MemoryType> {
     if mt.shared {
@@ -156,7 +156,7 @@ pub(crate) struct ModuleInner {
 
     /// Adapter functions in this module defined in the wasm interface types
     /// section.
-    adapters: Box<[(FuncType, Adapter)]>,
+    adapters: Box<[(AdapterType, Adapter)]>,
 
     /// Map from index of import in the core module to where that import is
     /// going to be satisfied.
@@ -171,6 +171,7 @@ pub struct Names {
     pub module_name: Option<String>,
 }
 
+#[derive(Debug)]
 enum Adapter {
     /// This adapter is an imported function, and imports the nth function in
     /// the user-provided imports array
@@ -604,6 +605,15 @@ impl Module {
         &self.inner.store
     }
 
+    /// Returns the length of the adapter
+    pub fn adapters(&self) -> usize {
+        for elem in self.inner.adapters.iter() {
+            println!("{:#?}", elem);
+        }
+        let size = &self.inner.adapters.len();
+        *size
+    }
+
     /// Register this module's stack frame information into the global scope.
     ///
     /// This is required to ensure that any traps can be properly symbolicated.
@@ -827,8 +837,8 @@ impl Module {
                     for ty in list {
                         let ty = ty?;
                         let params = ty.params.iter().map(cvt_ty).collect();
-                        let results = ty.params.iter().map(cvt_ty).collect();
-                        let ty = FuncType::new(params, results);
+                        let results = ty.results.iter().map(cvt_ty).collect();
+                        let ty = AdapterType::new(params, results);
                         types.push(ty);
                     }
                 }
@@ -840,7 +850,7 @@ impl Module {
                             ImportType::new(
                                 import.module,
                                 import.name,
-                                ExternType::Func(ty.clone()),
+                                ExternType::Adapter(ty.clone()),
                             ),
                             ImportKind::Adapter,
                         ));
@@ -860,7 +870,7 @@ impl Module {
                     for export in list {
                         let export = export?;
                         let ty = adapters[export.func as usize].0.clone();
-                        exports.push(ExportType::new(export.name, ExternType::Func(ty)));
+                        exports.push(ExportType::new(export.name, ExternType::Adapter(ty)));
                         inner.export_map.insert(
                             export.name.to_string(),
                             Export::Adapter(export.func as usize),
@@ -917,14 +927,15 @@ impl Module {
         }
     }
 
-    pub(crate) fn adapter(module: &Self, instance: InstanceHandle, idx: usize) -> Func {
+    pub(crate) fn adapter(module: &Self, instance: InstanceHandle, idx: usize) -> AdapterFunc {
         let ty = module.inner.adapters[idx].0.clone();
         let callable = Rc::new(CallAdapter {
             module: module.clone(),
             idx,
             instance,
         });
-        Func::new(&module.inner.store, ty, callable)
+        // Func::new(&module.inner.store, ty, callable)
+        AdapterFunc::new(&module.inner.store, ty, callable)
     }
 }
 
@@ -976,6 +987,7 @@ impl Callable for CallAdapter {
         }
 
         // should be true because of validation
+        // println!("{:#?}", ty.results());
         assert_eq!(stack.len(), results.len());
         for (item, slot) in stack.into_iter().zip(results) {
             *slot = item;
@@ -985,13 +997,47 @@ impl Callable for CallAdapter {
 }
 
 impl CallAdapter {
+
+    fn callcore(&self, f: &u32, stack: &mut Vec<Val>) -> Result<(), Trap> {
+        let idx = FuncIndex::from_u32(*f);
+        let sigidx = self.instance.module().local.functions[idx];
+        let sig = &self.instance.module().local.signatures[sigidx];
+        let export = wasmtime_environ::Export::Function(idx);
+
+        if let wasmtime_runtime::Export::Function(export) = self.instance.clone().lookup_by_declaration(&export) {
+            // let export = unimplemented!();
+            let trampoline = self.instance.trampoline(export.signature).expect("failed to retrieve trampoline from module");
+            let mut ret = vec![Val::I32(0); sig.returns.len()];
+            // offset 1 here for the vmctx parameter
+            // offset 2 here for I64 value (*unknown*)
+
+            let params_start = stack.len() + 2 - sig.params.len();
+            
+            WasmtimeFn::new(&self.module.inner.store, self.instance.clone(), export, trampoline)
+                .call(&stack[params_start..], &mut ret)?;
+
+            stack.truncate(params_start);
+            // println!("{:#?}", f);
+            // println!("{:#?}", ret);
+            stack.extend(ret);
+        }
+        Ok(())
+    }
+
+    fn create_memory(&self) -> Memory {
+        
+        let memorytype = MemoryType::new(Limits::new(5, Some(5)));
+        let memory = Memory::new(self.module.store(), memorytype);
+        memory
+    }
+
     fn execute(
         &self,
         stack: &mut Vec<Val>,
         args: &[Val],
         instr: &wit_parser::Instruction,
     ) -> Result<(), Trap> {
-        use wit_parser::Instruction::*;
+        use wit_parser::{Instruction::*};
 
         fn pop(stack: &mut Vec<Val>, ty: ValType) -> Val {
             let ret = stack.pop().unwrap();
@@ -1006,33 +1052,45 @@ impl CallAdapter {
             // then run through our other infrastructure to call into this
             // function.
             CallCore(f) => {
-                let idx = FuncIndex::from_u32(*f);
-                let sigidx = self.instance.module().local.functions[idx];
-                let sig = &self.instance.module().local.signatures[sigidx];
-                let export = wasmtime_environ::Export::Function(idx);
-                if let wasmtime_runtime::Export::Function(export) = self.instance.clone().lookup_by_declaration(&export) {
-                // let export = unimplemented!();
-                let trampoline = self.instance.trampoline(export.signature).expect("failed to retrieve trampoline from module");
-                let mut ret = vec![Val::I32(0); sig.returns.len()];
-                // offset 1 here for the vmctx parameter
-                let params_start = stack.len() + 1 - sig.params.len();
-                WasmtimeFn::new(&self.module.inner.store, self.instance.clone(), export, trampoline)
-                    .call(&stack[params_start..], &mut ret)?;
-                stack.truncate(params_start);
-                stack.extend(ret);
-                }
+                self.callcore(f, stack)?;
             }
 
             i @ End => {
                 return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
             }
 
-            i @ MemoryToString(_) => {
-                return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
+            MemoryToString(s) => {
+                println!("{:#?}", s);
             }
 
-            i @ StringToMemory(_) => {
-                return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
+            StringToMemory(s) => {
+                stack.push(Val::I32(s.mem as i32));
+                self.callcore(&s.malloc, stack)?;
+                let memory = self.instance
+                    .lookup("memory")
+                    .and_then(|e| 
+                        if let rtExport::Memory(s) = e {
+                            Some(Memory::from_wasmtime_memory(
+                                s,
+                                self.module.store(),
+                                self.instance.clone()
+                            ))
+                        }
+                        else { None }
+                    )
+                    .unwrap_or(self.create_memory());
+                unsafe {
+                    let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
+                    let val = String::from(pop(stack, ValType::String).unwrap_string());
+                    let bytes = val.as_bytes();
+                    let data = memory.data_unchecked_mut();
+                    let element = &mut data[ptr..ptr+bytes.len()];
+                    element.copy_from_slice(&bytes[..]);
+                    stack.push(Val::I32(ptr as i32));
+                    stack.push(Val::I32(bytes.len() as i32));
+                }
+                
+                // println!("{:#?}", s);
             }
 
             i @ CallAdapter(_) => {

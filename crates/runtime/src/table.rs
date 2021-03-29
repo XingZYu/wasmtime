@@ -21,9 +21,10 @@ impl Table {
     pub fn new(plan: &TablePlan) -> Self {
         match plan.table.ty {
             TableElementType::Func => (),
-            TableElementType::Val(ty) => {
-                unimplemented!("tables of types other than anyfunc ({})", ty)
-            }
+            // TableElementType::Val(ty) => {
+            //     unimplemented!("tables of types other than anyfunc ({})", ty)
+            // }
+            _ => ()
         };
         match plan.style {
             TableStyle::CallerChecksSignature => Self {

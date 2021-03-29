@@ -163,6 +163,8 @@ pub enum ExternType {
     Table(TableType),
     /// This external type is the type of a WebAssembly memory.
     Memory(MemoryType),
+    /// This external type is the type of a WebAssembly adapter function.
+    Adapter(AdapterType)
 }
 
 macro_rules! accessors {
@@ -195,6 +197,7 @@ impl ExternType {
         (Global(GlobalType) global unwrap_global)
         (Table(TableType) table unwrap_table)
         (Memory(MemoryType) memory unwrap_memory)
+        (Adapter(AdapterType) adapter unwrap_adapter)
     }
 }
 
@@ -202,6 +205,35 @@ impl ExternType {
 fn from_wasmtime_abiparam(param: &ir::AbiParam) -> Option<ValType> {
     assert_eq!(param.purpose, ir::ArgumentPurpose::Normal);
     ValType::from_wasmtime_type(param.value_type)
+}
+
+/// A descriptor for a function in a WebAssembly module.
+///
+/// WebAssembly adapters can have 0 or more parameters and results.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdapterType {
+    params: Box<[ValType]>,
+    results: Box<[ValType]>,
+}
+
+impl AdapterType {
+    /// Creates a new function descriptor from the given parameters and results.
+    ///
+    /// The function descriptor returned will represent a function which takes
+    /// `params` as arguments and returns `results` when it is finished.
+    pub fn new(params: Box<[ValType]>, results: Box<[ValType]>) -> AdapterType {
+        AdapterType { params, results }
+    }
+    
+    /// Returns the list of parameter types for this function.
+    pub fn params(&self) -> &[ValType] {
+        &self.params
+    }
+
+    /// Returns the list of result types for this function.
+    pub fn results(&self) -> &[ValType] {
+        &self.results
+    }
 }
 
 /// A descriptor for a function in a WebAssembly module.

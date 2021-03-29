@@ -14,7 +14,7 @@ impl Resolver for SimpleResolver<'_> {
     fn resolve(&mut self, idx: u32, _name: &str, _field: &str) -> Option<Export> {
         self.imports
             .get(idx as usize)
-            .map(|i| i.get_wasmtime_export())
+            .map(|i| i.get_wasmtime_export().unwrap())
     }
 }
 
@@ -140,7 +140,7 @@ impl Instance {
                 }
                 crate::module::Export::Adapter(idx) => {
                     let func = Module::adapter(module, instance_handle.clone(), idx);
-                    Extern::Func(func)
+                    Extern::Adapter(func)
                 }
             };
             exports.push(export);

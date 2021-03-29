@@ -2,7 +2,7 @@ use crate::trampoline::{generate_global_export, generate_memory_export, generate
 use crate::values::{from_checked_anyfunc, into_checked_anyfunc, Val};
 use crate::Mutability;
 use crate::{ExternType, GlobalType, MemoryType, TableType, ValType};
-use crate::{Func, Store};
+use crate::{Func, AdapterFunc, Store};
 use anyhow::{anyhow, bail, Result};
 use std::slice;
 use wasmtime_environ::{ir, wasm};
@@ -28,6 +28,8 @@ pub enum Extern {
     Table(Table),
     /// A WebAssembly linear memory.
     Memory(Memory),
+    /// A WebAssembly adapter function
+    Adapter(AdapterFunc)
 }
 
 impl Extern {
@@ -37,6 +39,16 @@ impl Extern {
     pub fn func(&self) -> Option<&Func> {
         match self {
             Extern::Func(func) => Some(func),
+            _ => None,
+        }
+    }
+
+    /// Returns the underlying `AdapterFunc`, if this external is an adapter.
+    ///
+    /// Returns `None` if this is not an adapter.
+    pub fn adapter(&self) -> Option<&AdapterFunc> {
+        match self {
+            Extern::Adapter(func) => Some(func),
             _ => None,
         }
     }
@@ -78,15 +90,17 @@ impl Extern {
             Extern::Memory(ft) => ExternType::Memory(ft.ty().clone()),
             Extern::Table(tt) => ExternType::Table(tt.ty().clone()),
             Extern::Global(gt) => ExternType::Global(gt.ty().clone()),
+            Extern::Adapter(at) => ExternType::Adapter(at.ty().clone()),
         }
     }
 
-    pub(crate) fn get_wasmtime_export(&self) -> wasmtime_runtime::Export {
+    pub(crate) fn get_wasmtime_export(&self) -> Option<wasmtime_runtime::Export> {
         match self {
-            Extern::Func(f) => f.wasmtime_function().clone().into(),
-            Extern::Global(g) => g.wasmtime_export.clone().into(),
-            Extern::Memory(m) => m.wasmtime_export.clone().into(),
-            Extern::Table(t) => t.wasmtime_export.clone().into(),
+            Extern::Func(f) => Some(f.wasmtime_function().clone().into()),
+            Extern::Global(g) => Some(g.wasmtime_export.clone().into()),
+            Extern::Memory(m) => Some(m.wasmtime_export.clone().into()),
+            Extern::Table(t) => Some(t.wasmtime_export.clone().into()),
+            Extern::Adapter(_) => None,
         }
     }
 
@@ -117,6 +131,7 @@ impl Extern {
             Extern::Global(g) => &g.store,
             Extern::Memory(m) => &m.store,
             Extern::Table(t) => &t.store,
+            Extern::Adapter(a) => a.store(),
         };
         Store::same(my_store, store)
     }

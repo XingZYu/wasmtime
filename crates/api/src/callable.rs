@@ -85,8 +85,7 @@ pub trait Callable {
     fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), Trap>;
 }
 
-pub(crate) trait WrappedCallable {
-    fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), Trap>;
+pub trait WrappedCallable: Callable {
     fn wasmtime_handle(&self) -> &InstanceHandle;
     fn wasmtime_function(&self) -> &ExportFunction;
 }
@@ -114,7 +113,7 @@ impl WasmtimeFn {
     }
 }
 
-impl WrappedCallable for WasmtimeFn {
+impl Callable for WasmtimeFn {
     fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), Trap> {
         let f = self.wasmtime_function();
         let signature = self
@@ -175,6 +174,9 @@ impl WrappedCallable for WasmtimeFn {
 
         Ok(())
     }
+}
+
+impl WrappedCallable for WasmtimeFn {
     fn wasmtime_handle(&self) -> &InstanceHandle {
         &self.instance
     }
@@ -202,13 +204,16 @@ impl NativeCallable {
 }
 
 impl WrappedCallable for NativeCallable {
-    fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), Trap> {
-        self.callable.call(params, results)
-    }
     fn wasmtime_handle(&self) -> &InstanceHandle {
         &self.instance
     }
     fn wasmtime_function(&self) -> &ExportFunction {
         &self.export
+    }
+}
+
+impl Callable for NativeCallable {
+    fn call(&self, params: &[Val], results: &mut [Val]) -> Result<(), Trap> {
+        self.callable.call(params, results)
     }
 }

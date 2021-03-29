@@ -205,9 +205,8 @@ impl Val {
             | Val::U8(_)
             | Val::U16(_)
             | Val::U32(_)
-            | Val::U64(_) => true,
-
-            | Val::String(_) => unimplemented!(),
+            | Val::U64(_)
+            | Val::String(_) => true,
         }
     }
 }
