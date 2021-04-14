@@ -987,7 +987,6 @@ impl Callable for CallAdapter {
         }
 
         // should be true because of validation
-        // println!("{:#?}", ty.results());
         assert_eq!(stack.len(), results.len());
         for (item, slot) in stack.into_iter().zip(results) {
             *slot = item;
@@ -1024,11 +1023,19 @@ impl CallAdapter {
         Ok(())
     }
 
-    fn create_memory(&self) -> Memory {
-        
-        let memorytype = MemoryType::new(Limits::new(5, Some(5)));
-        let memory = Memory::new(self.module.store(), memorytype);
-        memory
+    fn create_memory(&self) -> Option<Memory> {
+        self.instance
+            .lookup("memory")
+            .and_then(|e| 
+                if let rtExport::Memory(s) = e {
+                    Some(Memory::from_wasmtime_memory(
+                        s,
+                        self.module.store(),
+                        self.instance.clone()
+                    ))
+                }
+                else { None }
+            )
     }
 
     fn execute(
@@ -1059,36 +1066,43 @@ impl CallAdapter {
                 return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
             }
 
-            MemoryToString(s) => {
-                println!("{:#?}", s);
+            MemoryToString(_) => {
+                let memory = match self.create_memory()
+                {
+                    None => return Err(Trap::new("Missing Memory Export which is necessary")),
+                    Some(s) => s,
+                };
+                let length = pop(stack, ValType::I32).unwrap_i32() as usize;
+                let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
+                unsafe {
+                    use std::str;
+                    let data = memory.data_unchecked();
+                    stack.push(Val::String(
+                        str::from_utf8(&data[ptr..ptr+length])
+                        .unwrap_or("Error")
+                        .to_string()
+                    ));
+                }
             }
 
             StringToMemory(s) => {
+                let memory = match self.create_memory()
+                {
+                    None => return Err(Trap::new("Missing Memory Export which is necessary")),
+                    Some(s) => s,
+                };
                 stack.push(Val::I32(s.mem as i32));
                 self.callcore(&s.malloc, stack)?;
-                let memory = self.instance
-                    .lookup("memory")
-                    .and_then(|e| 
-                        if let rtExport::Memory(s) = e {
-                            Some(Memory::from_wasmtime_memory(
-                                s,
-                                self.module.store(),
-                                self.instance.clone()
-                            ))
-                        }
-                        else { None }
-                    )
-                    .unwrap_or(self.create_memory());
+                let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
+                let val = String::from(pop(stack, ValType::String).unwrap_string());
+                let bytes = val.as_bytes();
                 unsafe {
-                    let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
-                    let val = String::from(pop(stack, ValType::String).unwrap_string());
-                    let bytes = val.as_bytes();
                     let data = memory.data_unchecked_mut();
                     let element = &mut data[ptr..ptr+bytes.len()];
                     element.copy_from_slice(&bytes[..]);
-                    stack.push(Val::I32(ptr as i32));
-                    stack.push(Val::I32(bytes.len() as i32));
                 }
+                stack.push(Val::I32(ptr as i32));
+                stack.push(Val::I32(bytes.len() as i32));
                 
                 // println!("{:#?}", s);
             }

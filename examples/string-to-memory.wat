@@ -1,5 +1,5 @@
 (module
-  (memory 1)
+  (memory (export "memory") 1)
 
   (global $glen (mut i32) (i32.const 0))
   (global $gptr (mut i32) (i32.const 0))

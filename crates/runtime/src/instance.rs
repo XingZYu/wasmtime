@@ -141,6 +141,10 @@ impl Instance {
         &self.module
     }
 
+    pub(crate) fn module_mut(&mut self) -> &mut Arc<Module> {
+        &mut self.module
+    }
+
     pub(crate) fn module_ref(&self) -> &Module {
         &*self.module
     }
@@ -1021,6 +1025,12 @@ impl InstanceHandle {
     /// Return a reference to a module.
     pub fn module_ref(&self) -> &Module {
         self.instance().module_ref()
+    }
+    
+    /// Return a mutable reference to a module
+    pub fn module_mut(&mut self) -> &mut Arc<Module> {
+        let mut_instance = unsafe{ &mut *self.instance };
+        mut_instance.module_mut()
     }
 
     /// Lookup an export with the given name.

@@ -41,6 +41,7 @@ fn main() -> Result<()> {
 
     let params = [Val::String("Hello world".to_string())];
     match run("set", &instance, &params) {
+        // Ok(s) => println!("{:#?}", s),
         Ok(_) => (),
         Err(e) => println!("Error occured: {}", e),
     };
@@ -48,6 +49,7 @@ fn main() -> Result<()> {
     
     println!("Extracting export 'get'...");
     match run("get", &instance, &[]) {
+        // Ok(s) => println!("{:#?}", s),
         Ok(_) => (),
         Err(e) => println!("Error occured: {}", e),
     };
@@ -65,7 +67,8 @@ fn run(func_name: &str, instance: &Instance, params: &[Val]) -> Result<Vec<Strin
 
     let result = answer.call(&params)?;
 
-    println!("Call into Func {} succeed", func_name);
+    println!("Call into Func '{}' succeed", func_name);
+    println!("");
     if result.len() > 0 {
         res_string = result.iter()
             .map(|s| print_result(&s))
@@ -79,8 +82,8 @@ fn run(func_name: &str, instance: &Instance, params: &[Val]) -> Result<Vec<Strin
 
 fn print_result(value: &Val) -> String {
     let rust_val = match value {
-        Val::I32(s) => format!("{}", value.unwrap_i32()),
-        Val::String(s) => value.unwrap_string().to_string(),
+        Val::I32(_) => format!("{}", value.unwrap_i32()),
+        Val::String(_) => value.unwrap_string().to_string(),
         _ => unimplemented!("Not implemented types"),
     };
     println!("{}", rust_val);
