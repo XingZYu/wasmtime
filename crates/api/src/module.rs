@@ -4,7 +4,7 @@ use crate::types::{
     ExportType, ExternType, FuncType, GlobalType, ImportType, Limits, MemoryType, Mutability,
     TableType, ValType, AdapterType
 };
-use crate::{Callable, Func, Store, Trap, Val, AdapterFunc, Memory};
+use crate::{Callable, Store, Trap, Val, AdapterFunc, Memory};
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::convert::TryInto;
