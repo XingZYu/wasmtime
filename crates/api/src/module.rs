@@ -968,22 +968,45 @@ impl Callable for CallAdapter {
             if param.ty() != *expected {
                 return Err(Trap::new(format!(
                     "expected {:?} for parameter {}, got {:?}",
-                    param.ty(),
+                    expected,
                     i,
-                    expected
+                    param.ty(),
                 )));
             }
         }
 
+        // Note here `stack` is a runtime stack 
+        // while `finally` is for the deferred instructions 
+        // which would be executed at the end of our adapter call
         let mut stack = Vec::new();
-
+        let mut finally = Vec::new();
         match adapter {
             Adapter::Local(instrs) => {
                 for instr in instrs {
-                    self.execute(&mut stack, params, instr)?;
+                    println!("{:#?}", instr);
+                    self.execute(&mut stack, params, instr, &mut finally)?;
                 }
             }
             Adapter::Import(_) => panic!("unimplemented import"),
+        }
+
+        // Final phase should be executed here, 
+        // considering the existence of `DeferCallCore` instruction. 
+        while !finally.is_empty() {
+            let (instr, params) = finally.pop().unwrap();
+            match instr {
+                wit_parser::Instruction::DeferCallCore(_) => {
+                    return Err(Trap::new(format!(
+                        "Unexpected `defer-call-core` instruction
+                        in finally phase"
+                    )))
+                }, 
+                _ => (),
+            }
+            for param in params {
+                stack.push(param);
+            }
+            self.execute(&mut stack, &[], &instr, &mut finally)?;
         }
 
         // should be true because of validation
@@ -995,7 +1018,32 @@ impl Callable for CallAdapter {
     }
 }
 
+
+/// Function used for test, 
+/// print adapter function stack
+#[allow(dead_code)]
+fn print_stack(stack: &Vec<Val>) {
+    for (i, item) in stack.into_iter().enumerate() {
+        println!("[{}]: {:#?}", i, item);
+    }
+}
+
 impl CallAdapter {
+    // Function used for test, print contents of memory
+    #[allow(dead_code)]
+    fn print_memory(&self, low: usize, high: usize, mem: &u32) -> Result<(), Trap> {
+        let memory = match self.create_memory(mem)
+        {
+            None => return Err(Trap::new("Missing Memory Export which is necessary")),
+            Some(s) => s,
+        };
+        unsafe {
+            let data = memory.data_unchecked();
+            println!("{:#?}", &data[low..high]);
+
+        }
+        Ok(())
+    }
 
     fn callcore(&self, f: &u32, stack: &mut Vec<Val>) -> Result<(), Trap> {
         let idx = FuncIndex::from_u32(*f);
@@ -1004,7 +1052,6 @@ impl CallAdapter {
         let export = wasmtime_environ::Export::Function(idx);
 
         if let wasmtime_runtime::Export::Function(export) = self.instance.clone().lookup_by_declaration(&export) {
-            // let export = unimplemented!();
             let trampoline = self.instance.trampoline(export.signature).expect("failed to retrieve trampoline from module");
             let mut ret = vec![Val::I32(0); sig.returns.len()];
             // offset 1 here for the vmctx parameter
@@ -1016,26 +1063,36 @@ impl CallAdapter {
                 .call(&stack[params_start..], &mut ret)?;
 
             stack.truncate(params_start);
-            // println!("{:#?}", f);
-            // println!("{:#?}", ret);
             stack.extend(ret);
         }
         Ok(())
     }
 
-    fn create_memory(&self) -> Option<Memory> {
-        self.instance
-            .lookup("memory")
-            .and_then(|e| 
-                if let rtExport::Memory(s) = e {
-                    Some(Memory::from_wasmtime_memory(
+    /// Create a memory handle for the given memory index
+    /// 
+    /// Used for memory instructions like `StringToMemory` and `MemoryToString`
+    /// 
+    /// Returns `Some(Memroy)` if such export can be found, otherwise `None`
+    fn create_memory(&self, mem: &u32) -> Option<Memory> {
+        use cranelift_wasm::MemoryIndex;
+        use wasmtime_environ::Export as envExport;
+        let memidx = MemoryIndex::from_u32(*mem);
+        let export_memory = envExport::Memory(memidx);
+
+        match self.instance.module().local.defined_memory_index(memidx) {
+            Some(_) => {
+                let export = self.instance.lookup_by_declaration(&export_memory);
+                match export {
+                    rtExport::Memory(s) => Some(Memory::from_wasmtime_memory(
                         s,
                         self.module.store(),
                         self.instance.clone()
-                    ))
+                    )),
+                    _ => None,
                 }
-                else { None }
-            )
+            }
+            _ => None,
+        }
     }
 
     fn execute(
@@ -1043,6 +1100,7 @@ impl CallAdapter {
         stack: &mut Vec<Val>,
         args: &[Val],
         instr: &wit_parser::Instruction,
+        finally: &mut Vec<(wit_parser::Instruction, Vec<Val>)>, 
     ) -> Result<(), Trap> {
         use wit_parser::{Instruction::*};
 
@@ -1066,8 +1124,11 @@ impl CallAdapter {
                 return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
             }
 
-            MemoryToString(_) => {
-                let memory = match self.create_memory()
+            // Wasmtime implementation of adapter instruction `MemoryToString`
+            // - get a export memory from the given memory index
+            // - read a byte array as string from memory data
+            MemoryToString(s) => {
+                let memory = match self.create_memory(s)
                 {
                     None => return Err(Trap::new("Missing Memory Export which is necessary")),
                     Some(s) => s,
@@ -1084,18 +1145,24 @@ impl CallAdapter {
                     ));
                 }
             }
-
+            
+            // Wasmtime implementation of adapter instruction `StringToMemory`
+            // - get a export memory from the give memory index
+            // - use `malloc` to allocate the memory space of the given size
+            // - write string as bytes into memory data
+            // - call core function to set global pointers for this string
             StringToMemory(s) => {
-                let memory = match self.create_memory()
+                let memory = match self.create_memory(&s.mem)
                 {
                     None => return Err(Trap::new("Missing Memory Export which is necessary")),
                     Some(s) => s,
                 };
-                stack.push(Val::I32(s.mem as i32));
-                self.callcore(&s.malloc, stack)?;
-                let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
                 let val = String::from(pop(stack, ValType::String).unwrap_string());
                 let bytes = val.as_bytes();
+                stack.push(Val::I32(bytes.len() as i32));
+                self.callcore(&s.malloc, stack)?;
+                let ptr = pop(stack, ValType::I32).unwrap_i32() as usize;
+                
                 unsafe {
                     let data = memory.data_unchecked_mut();
                     let element = &mut data[ptr..ptr+bytes.len()];
@@ -1103,16 +1170,25 @@ impl CallAdapter {
                 }
                 stack.push(Val::I32(ptr as i32));
                 stack.push(Val::I32(bytes.len() as i32));
-                
-                // println!("{:#?}", s);
             }
 
             i @ CallAdapter(_) => {
                 return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
             }
 
-            i @ DeferCallCore(_) => {
-                return Err(Trap::new(format!("unimplemented instruction {:?}", i)));
+            // Wasmtime implementation of adapter instrcution `DeferCallCore`
+            // 
+            // Stack remain unchanged after deferred call, the input arguments and 
+            // a `CallCore` instruction are stored in `finally` stack, which will be 
+            // processed at the end of the adapter call. 
+            DeferCallCore(id) => {
+                let idx = FuncIndex::from_u32(*id);
+                let sigidx = self.instance.module().local.functions[idx];
+                let sig = &self.instance.module().local.signatures[sigidx];
+                let params_start = stack.len() + 2 - sig.params.len();
+                let params: Vec<Val> = stack[params_start..].iter().cloned().collect();
+                println!("{:#?}", params);
+                finally.push((CallCore(*id), params));
             }
 
             I32ToS8 => {

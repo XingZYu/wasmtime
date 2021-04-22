@@ -132,8 +132,8 @@ pub enum Trap {
 impl fmt::Display for Trap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Trap::User(user) => user.fmt(f),
-            Trap::Wasm { desc, .. } => desc.fmt(f),
+            Self::User(user) => user.fmt(f),
+            Self::Wasm { desc, .. } => desc.fmt(f),
         }
     }
 }
@@ -150,7 +150,7 @@ impl Trap {
             trap_code,
         };
         let backtrace = Backtrace::new();
-        Trap::Wasm { desc, backtrace }
+        Self::Wasm { desc, backtrace }
     }
 }
 
@@ -225,8 +225,8 @@ enum UnwindReason {
 }
 
 impl CallThreadState {
-    fn new(vmctx: *mut VMContext) -> CallThreadState {
-        CallThreadState {
+    fn new(vmctx: *mut VMContext) -> Self {
+        Self {
             unwind: Cell::new(UnwindReason::None),
             vmctx,
             jmp_buf: Cell::new(ptr::null()),
@@ -235,7 +235,7 @@ impl CallThreadState {
         }
     }
 
-    fn with(mut self, closure: impl FnOnce(&CallThreadState) -> i32) -> Result<(), Trap> {
+    fn with(mut self, closure: impl FnOnce(&Self) -> i32) -> Result<(), Trap> {
         tls::with(|prev| {
             self.prev = prev.map(|p| p as *const _);
             let ret = tls::set(&self, || closure(&self));
@@ -340,7 +340,8 @@ impl CallThreadState {
         if self.jmp_buf.get().is_null() {
             return ptr::null();
         }
-        let backtrace = Backtrace::new_unresolved();
+        let mut backtrace = Backtrace::new_unresolved();
+        backtrace.resolve();
         self.reset_guard_page.set(reset_guard_page);
         self.unwind.replace(UnwindReason::Trap {
             backtrace,
