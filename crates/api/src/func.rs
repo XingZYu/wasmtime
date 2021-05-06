@@ -187,6 +187,11 @@ impl AdapterFunc {
     pub(crate) fn store(&self) -> &Store {
         &self.store
     }
+
+    /// Returns the number of parameters that this function takes.
+    pub fn param_arity(&self) -> usize {
+        self.ty.params().len()
+    }
     
     /// Returns the number of results this function produces.
     pub fn result_arity(&self) -> usize {

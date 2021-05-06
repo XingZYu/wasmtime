@@ -983,7 +983,6 @@ impl Callable for CallAdapter {
         match adapter {
             Adapter::Local(instrs) => {
                 for instr in instrs {
-                    println!("{:#?}", instr);
                     self.execute(&mut stack, params, instr, &mut finally)?;
                 }
             }

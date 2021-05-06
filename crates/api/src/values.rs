@@ -277,6 +277,12 @@ impl From<String> for Val {
     }
 }
 
+impl From<&str> for Val {
+    fn from(val: &str) -> Val {
+        Val::String(String::from(val))
+    }
+}
+
 impl From<AnyRef> for Val {
     fn from(val: AnyRef) -> Val {
         Val::AnyRef(val)

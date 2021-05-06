@@ -2257,6 +2257,7 @@ dependencies = [
  "anyhow",
  "backtrace",
  "cfg-if",
+ "cranelift-wasm",
  "file-per-thread-logger",
  "lazy_static",
  "libc",

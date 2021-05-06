@@ -3,7 +3,7 @@
 	url = https://github.com/WebAssembly/testsuite
 [submodule "crates/c-api/examples/wasm-c-api"]
 	path = crates/c-api/wasm-c-api
-	url = https://github.com/WebAssembly/wasm-c-api
+	url = https://github.com/edittriendl/wasm-c-api.git
 [submodule "WASI"]
 	path = crates/wasi-common/wig/WASI
 	url = https://github.com/WebAssembly/WASI

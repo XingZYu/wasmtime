@@ -1,14 +1,16 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::process::Command;
 
 fn run_c_example(name: &'static str, expected_out: &[u8]) {
     let cargo = env::var("MAKE").unwrap_or("make".to_string());
-    let pkg_dir = env!("CARGO_MANIFEST_DIR");
-    let examples_dir = PathBuf::from(pkg_dir).join("examples");
+    let pkg_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let capi_root = pkg_dir.join("wasm-c-api");
+    println!("{:#?}", capi_root);
+    let examples_dir = PathBuf::from(&capi_root).join("example");
     let make_arg = format!("run-{}-c", name);
     let output = Command::new(cargo)
-        .current_dir(examples_dir)
+        .current_dir(capi_root)
         .args(&["-s", &make_arg])
         .output()
         .expect("success");

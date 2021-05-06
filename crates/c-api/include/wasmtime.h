@@ -31,6 +31,7 @@ enum wasmtime_opt_level_enum { // OptLevel
 WASMTIME_CONFIG_PROP(debug_info, bool)
 WASMTIME_CONFIG_PROP(wasm_threads, bool)
 WASMTIME_CONFIG_PROP(wasm_reference_types, bool)
+WASMTIME_CONFIG_PROP(wasm_interface_types, bool)
 WASMTIME_CONFIG_PROP(wasm_simd, bool)
 WASMTIME_CONFIG_PROP(wasm_bulk_memory, bool)
 WASMTIME_CONFIG_PROP(wasm_multi_value, bool)
