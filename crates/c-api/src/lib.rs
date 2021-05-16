@@ -923,6 +923,11 @@ impl wasm_val_t {
                 self.kind = from_valtype(&ValType::F64);
                 self.of = wasm_val_t__bindgen_ty_1 { u64: f };
             }
+            Val::String(s) => {
+                self.kind = from_valtype(&ValType::String);
+                let c_string = CString::new(s.as_str()).expect("CString::new failed");
+                self.of = wasm_val_t__bindgen_ty_1{string: c_string.into_raw()};
+            }
             _ => unimplemented!("wasm_val_t::from_val {:?}", val),
         }
     }
