@@ -71,6 +71,10 @@ members = [
   "fuzz",
 ]
 
+exclude = [
+  "crates/wasi-common"
+]
+
 [features]
 lightbeam = [
     "wasmtime-environ/lightbeam",

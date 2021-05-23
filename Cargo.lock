@@ -543,7 +543,7 @@ dependencies = [
  "file-per-thread-logger",
  "filecheck",
  "indicatif",
- "pretty_env_logger 0.3.1",
+ "pretty_env_logger",
  "serde",
  "target-lexicon",
  "term",
@@ -652,12 +652,6 @@ dependencies = [
  "syn",
  "synstructure",
 ]
-
-[[package]]
-name = "diff"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
 name = "digest"
@@ -1360,16 +1354,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pretty_env_logger"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "926d36b9553851b8b0005f1275891b392ee4d2d833852c417ed025477350fb9d"
-dependencies = [
- "env_logger 0.7.1",
- "log",
-]
-
-[[package]]
 name = "proc-macro-error"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2049,7 +2033,7 @@ dependencies = [
  "anyhow",
  "cfg-if",
  "os_pipe",
- "pretty_env_logger 0.3.1",
+ "pretty_env_logger",
  "target-lexicon",
  "tempfile",
  "wasi-common",
@@ -2261,13 +2245,12 @@ dependencies = [
  "file-per-thread-logger",
  "lazy_static",
  "libc",
- "pretty_env_logger 0.3.1",
+ "pretty_env_logger",
  "rayon",
  "region",
  "rustc-demangle",
  "target-lexicon",
  "tempfile",
- "wasi-common",
  "wasmparser",
  "wasmtime-environ",
  "wasmtime-jit",
@@ -2301,7 +2284,7 @@ dependencies = [
  "filecheck",
  "libc",
  "more-asserts",
- "pretty_env_logger 0.3.1",
+ "pretty_env_logger",
  "rayon",
  "structopt",
  "target-lexicon",
@@ -2354,7 +2337,7 @@ dependencies = [
  "lightbeam",
  "log",
  "more-asserts",
- "pretty_env_logger 0.3.1",
+ "pretty_env_logger",
  "rand 0.7.3",
  "rayon",
  "serde",
@@ -2698,10 +2681,7 @@ name = "witx"
 version = "0.8.5"
 dependencies = [
  "anyhow",
- "diff",
  "log",
- "pretty_env_logger 0.4.0",
- "structopt",
  "thiserror",
  "wast 11.0.0",
 ]
