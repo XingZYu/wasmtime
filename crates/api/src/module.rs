@@ -1186,7 +1186,6 @@ impl CallAdapter {
                 let sig = &self.instance.module().local.signatures[sigidx];
                 let params_start = stack.len() + 2 - sig.params.len();
                 let params: Vec<Val> = stack[params_start..].iter().cloned().collect();
-                println!("{:#?}", params);
                 finally.push((CallCore(*id), params));
             }
 

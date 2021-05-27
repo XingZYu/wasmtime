@@ -906,6 +906,7 @@ impl wasm_val_t {
     }
 
     fn set(&mut self, val: Val) {
+        use std::ffi::CString;
         match val {
             Val::I32(i) => {
                 self.kind = from_valtype(&ValType::I32);
@@ -913,6 +914,14 @@ impl wasm_val_t {
             }
             Val::I64(i) => {
                 self.kind = from_valtype(&ValType::I64);
+                self.of = wasm_val_t__bindgen_ty_1 { i64: i };
+            }
+            Val::S32(i) => {
+                self.kind = from_valtype(&ValType::S32);
+                self.of = wasm_val_t__bindgen_ty_1 { i32: i };
+            }
+            Val::S64(i) => {
+                self.kind = from_valtype(&ValType::S64);
                 self.of = wasm_val_t__bindgen_ty_1 { i64: i };
             }
             Val::F32(f) => {
@@ -943,6 +952,14 @@ impl wasm_val_t {
                 kind: from_valtype(&ValType::I64),
                 of: wasm_val_t__bindgen_ty_1 { i64: *i },
             },
+            Val::S32(i) => wasm_val_t {
+                kind: from_valtype(&ValType::S32),
+                of: wasm_val_t__bindgen_ty_1 { i32: *i },
+            },
+            Val::S64(i) => wasm_val_t {
+                kind: from_valtype(&ValType::S64),
+                of: wasm_val_t__bindgen_ty_1 { i64: *i },
+            },
             Val::F32(f) => wasm_val_t {
                 kind: from_valtype(&ValType::F32),
                 of: wasm_val_t__bindgen_ty_1 { u32: *f },
@@ -969,6 +986,8 @@ impl wasm_val_t {
         match into_valtype(self.kind) {
             ValType::I32 => Val::from(unsafe { self.of.i32 }),
             ValType::I64 => Val::from(unsafe { self.of.i64 }),
+            ValType::S32 => Val::S32(unsafe { self.of.i32 }),
+            ValType::S64 => Val::S64(unsafe { self.of.i64 }),
             ValType::F32 => Val::from(unsafe { self.of.f32 }),
             ValType::F64 => Val::from(unsafe { self.of.f64 }),
             ValType::String => Val::from(unsafe { 

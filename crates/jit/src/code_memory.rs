@@ -108,6 +108,7 @@ impl CodeMemory {
     }
 
     /// Make all allocated memory executable.
+    #[allow(deprecated)]
     pub fn publish(&mut self) {
         self.push_current(0)
             .expect("failed to push current memory map");
